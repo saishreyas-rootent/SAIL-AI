@@ -162,7 +162,13 @@ function handleApiResponse(data) {
 
     const state = data.state;
 
-    // 1. Clarification needed — show sub-questions card
+    // 1. Final answer - render structured JSON *immediately* if it exists
+    if (state.final_answer) {
+        appendStructuredMessage(state.final_answer, state.sources, true);
+        return;
+    }
+
+    // 2. Clarification needed — show sub-questions card, if needed
     if (data.awaiting_clarification && data.clarification_questions && data.clarification_questions.length) {
         const parsed = tryParseJson(state.current_draft);
         const intro = parsed ? (parsed.answer_text || '') : '';
@@ -170,7 +176,7 @@ function handleApiResponse(data) {
         return;
     }
 
-    // 2. Expert HITL review needed
+    // 3. Expert HITL review needed
     if (data.is_waiting_for_review) {
         const parsed = tryParseJson(state.current_draft);
         const draft = parsed ? (parsed.answer_text || state.current_draft) : state.current_draft;
@@ -178,14 +184,14 @@ function handleApiResponse(data) {
         return;
     }
 
-    // 3. Final answer — render structured JSON
-    if (state.final_answer) {
-        appendStructuredMessage(state.final_answer, state.sources, true);
-    } else if (state.current_draft) {
+    // 4. If we get here and there is a draft but no final answer, show the draft
+    if (state.current_draft && !state.final_answer) {
         appendStructuredMessage(state.current_draft, state.sources, true);
-    } else {
-        appendMessage('bot', '⚠ No answer was generated. Please try again.');
+        return;
     }
+
+    // 5. If all else fails:
+    appendMessage('bot', '⚠ No answer was generated. Please try again.');
 }
 
 // ─── CLARIFICATION CARD ───────────────────────────────────────────────────────
@@ -208,7 +214,7 @@ function appendClarificationCard(introText, questions) {
                 class="clarify-input"
                 id="${cardId}_q${i}"
                 placeholder="Your answer…"
-                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); submitClarification('${cardId}', ${JSON.stringify(questions).replace(/'/g, "\\'")}); }"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); submitClarification('${cardId}', ${JSON.stringify(questions).replace(/"/g, '&quot;')}); }"
             />
         </div>
     `).join('');
@@ -226,7 +232,7 @@ function appendClarificationCard(introText, questions) {
                     ${questionFields}
                 </div>
                 <div class="clarify-actions">
-                    <button class="clarify-submit-btn" onclick="submitClarification('${cardId}', ${JSON.stringify(questions).replace(/'/g, "\\'")})">
+                    <button class="clarify-submit-btn" onclick="submitClarification('${cardId}', ${JSON.stringify(questions).replace(/"/g, '&quot;')})">
                         ↑ Send Answers
                     </button>
                 </div>
@@ -307,6 +313,7 @@ async function submitClarification(cardId, questions) {
         if (!response.ok) throw new Error(data.detail || 'Failed to submit answers');
 
         removeTyping();
+        // Make sure handleApiResponse is correctly called after submitClarification
         handleApiResponse(data);
 
     } catch (error) {
@@ -345,6 +352,12 @@ function appendStructuredMessage(content, sources, animate = false) {
     const bubble = document.getElementById(`${msgId}-bubble`);
     const extrasArea = document.getElementById(`${msgId}-extras`);
 
+    if (parsed.is_datasheet) {
+        renderDatasheet(bubble, extrasArea, parsed, msgId);
+        return; // Stop here
+    }
+
+    // Existing rendering logic (price estimates, etc.)
     if (animate) {
         const sequence = [];
         if (parsed.summary) {
@@ -363,6 +376,22 @@ function appendStructuredMessage(content, sources, animate = false) {
     } else {
         renderFullStructured(bubble, extrasArea, parsed, sources, msgId);
     }
+}
+
+function renderDatasheet(bubbleElement, extrasElement, parsed, msgId) {
+    let bubbleHtml = '';
+    if (parsed.datasheet_summary) {
+        bubbleHtml += `<div class="msg-summary">${escapeHtml(parsed.datasheet_summary)}</div>`;
+    }
+    if (parsed.answer_text) {
+        bubbleHtml += `<div class="msg-answer-text">${renderMarkdown(parsed.answer_text)}</div>`;
+    }
+    bubbleElement.innerHTML = bubbleHtml;
+
+    // ← FIX: show extrasElement before rendering tables into it
+    extrasElement.style.display = 'block';
+    renderExtras(extrasElement, parsed, [], msgId);
+    if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 
 function renderFullStructured(bubbleElement, extrasElement, parsed, sources, msgId) {
@@ -467,29 +496,77 @@ function typeEffect(element, rawText, speed = 10, callback, plainText = false) {
 }
 
 // ─── TABLE BUILDER ────────────────────────────────────────────────────────────
+// ─── TABLE BUILDER ────────────────────────────────────────────────────────────
 function buildTableHtml(tbl, id) {
     if (!tbl.headers || !tbl.rows) return '';
-    const title = tbl.title
-        ? `<div class="tbl-title">${escapeHtml(tbl.title)}</div>` : '';
+
+    const title = tbl.title || 'Table';
+    const titleHtml = `<div class="tbl-title">${escapeHtml(title)}</div>`;
+
+    const downloadBtn = `
+        <button class="tbl-download-btn" title="Download as Excel" onclick="downloadTableAsXlsx('${id}', '${escapeHtml(title).replace(/'/g, "\\'")}')">
+            ⬇ Download XLS
+        </button>`;
+
     const ths = tbl.headers.map(h => `<th>${escapeHtml(String(h))}</th>`).join('');
-    const trs = tbl.rows.map((row, ri) => {
-        // Highlight total rows
+    const trs = tbl.rows.map((row) => {
         const isTotal = row[0] && String(row[0]).toLowerCase().includes('total');
         const rowClass = isTotal ? ' class="total-row"' : '';
         const tds = row.map(cell => `<td>${escapeHtml(String(cell ?? ''))}</td>`).join('');
         return `<tr${rowClass}>${tds}</tr>`;
     }).join('');
+
     return `
         <div class="tbl-container" id="${id}">
-            ${title}
+            <div class="tbl-header-row">
+                ${titleHtml}
+                ${downloadBtn}
+            </div>
             <div class="tbl-scroll">
-                <table class="spec-table">
+                <table class="spec-table" id="${id}_table">
                     <thead><tr>${ths}</tr></thead>
                     <tbody>${trs}</tbody>
                 </table>
             </div>
         </div>`;
 }
+
+function downloadTableAsXlsx(tableId, title) {
+    const table = document.getElementById(`${tableId}_table`);
+    if (!table) return;
+
+    const rows = [];
+
+    // Header row
+    const headers = Array.from(table.querySelectorAll('thead tr th')).map(th => th.innerText);
+    rows.push(headers);
+
+    // Data rows
+    Array.from(table.querySelectorAll('tbody tr')).forEach(tr => {
+        const cells = Array.from(tr.querySelectorAll('td')).map(td => td.innerText);
+        rows.push(cells);
+    });
+
+    // Build CSV content (XLS-compatible)
+    const csvContent = rows.map(r =>
+        r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+
+    // Add BOM for Excel UTF-8 compatibility
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/[^a-zA-Z0-9_\- ]/g, '_')}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+window.downloadTableAsXlsx = downloadTableAsXlsx;
 
 // ─── CHART.JS INITIALIZER ─────────────────────────────────────────────────────
 function initChart(canvasId, chartDef) {
@@ -509,46 +586,49 @@ function initChart(canvasId, chartDef) {
     ];
 
     const datasets = (chartDef.datasets || []).map((ds, i) => {
-        const color = ds.color || accentColors[i % accentColors.length];
+    // FIX: coerce all data values to numbers (LLM sometimes returns "65,000" strings)
+    const cleanData = (ds.data || []).map(v =>
+        typeof v === 'string' ? parseFloat(v.replace(/,/g, '')) : Number(v)
+    );
+    const color = ds.color || accentColors[i % accentColors.length];
 
-        if (type === 'pie') {
-            return {
-                label: ds.label || '',
-                data: ds.data || [],
-                backgroundColor: (ds.data || []).map((_, j) => accentColors[j % accentColors.length]),
-                borderColor: '#161b22',
-                borderWidth: 2,
-                hoverOffset: 8
-            };
-        }
-        if (type === 'radar') {
-            return {
-                label: ds.label || '',
-                data: ds.data || [],
-                backgroundColor: hexToRgba(color, 0.15),
-                borderColor: color,
-                borderWidth: 2,
-                pointBackgroundColor: color,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            };
-        }
-        // bar / line
+    if (type === 'pie') {
         return {
             label: ds.label || '',
-            data: ds.data || [],
-            backgroundColor: type === 'bar' ? hexToRgba(color, 0.75) : hexToRgba(color, 0.12),
-            borderColor: color,
-            borderWidth: type === 'bar' ? 0 : 2,
-            borderRadius: type === 'bar' ? 4 : 0,
-            fill: type === 'line',
-            tension: 0.35,
-            pointBackgroundColor: color,
-            pointRadius: type === 'line' ? 4 : 0,
-            pointHoverRadius: 6,
-            hoverBackgroundColor: type === 'bar' ? hexToRgba(color, 1) : undefined
+            data: cleanData,
+            backgroundColor: cleanData.map((_, j) => accentColors[j % accentColors.length]),
+            borderColor: '#161b22',
+            borderWidth: 2,
+            hoverOffset: 8
         };
-    });
+    }
+    if (type === 'radar') {
+        return {
+            label: ds.label || '',
+            data: cleanData,
+            backgroundColor: hexToRgba(color, 0.15),
+            borderColor: color,
+            borderWidth: 2,
+            pointBackgroundColor: color,
+            pointRadius: 4,
+            pointHoverRadius: 6
+        };
+    }
+    return {
+        label: ds.label || '',
+        data: cleanData,
+        backgroundColor: type === 'bar' ? hexToRgba(color, 0.75) : hexToRgba(color, 0.12),
+        borderColor: color,
+        borderWidth: type === 'bar' ? 0 : 2,
+        borderRadius: type === 'bar' ? 4 : 0,
+        fill: type === 'line',
+        tension: 0.35,
+        pointBackgroundColor: color,
+        pointRadius: type === 'line' ? 4 : 0,
+        pointHoverRadius: 6,
+        hoverBackgroundColor: type === 'bar' ? hexToRgba(color, 1) : undefined
+    };
+});
 
     const isPolar = type === 'pie' || type === 'radar';
 

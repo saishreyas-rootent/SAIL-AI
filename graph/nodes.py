@@ -12,35 +12,49 @@ load_dotenv()
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
 
 
+def _sanitize_chart_data(parsed: dict) -> dict:
+    """
+    Coerce chart dataset values to numbers.
+    LLM sometimes returns '65,000' or '₹65,000/ton' strings instead of plain numbers.
+    """
+    for chart in parsed.get("charts", []):
+        for ds in chart.get("datasets", []):
+            clean = []
+            for v in ds.get("data", []):
+                try:
+                    numeric_str = re.sub(r'[^\d.\-]', '', str(v).replace(",", ""))
+                    clean.append(float(numeric_str) if numeric_str else 0)
+                except (ValueError, TypeError):
+                    clean.append(0)
+            ds["data"] = clean
+    return parsed
+
+
 def _extract_json(text: str) -> dict:
     """
     Robustly extract and parse JSON from Agent 1's response.
     Handles markdown fences, leading/trailing text, and common escape issues.
     """
-    # Strip markdown fences if present
     text = re.sub(r'^```json\s*', '', text.strip(), flags=re.IGNORECASE)
     text = re.sub(r'^```\s*', '', text.strip(), flags=re.IGNORECASE)
     text = re.sub(r'```\s*$', '', text.strip())
     text = text.strip()
 
-    # Try direct parse first
     try:
-        return json.loads(text)
+        return _sanitize_chart_data(json.loads(text))
     except json.JSONDecodeError:
         pass
 
-    # Try to find JSON object boundaries
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
         candidate = text[start:end + 1]
         try:
-            return json.loads(candidate)
+            return _sanitize_chart_data(json.loads(candidate))
         except json.JSONDecodeError:
             pass
 
-    # Return a safe fallback so the app never crashes
-    return {
+    return _sanitize_chart_data({
         "summary": "",
         "answer_text": text,
         "tables": [],
@@ -49,7 +63,7 @@ def _extract_json(text: str) -> dict:
         "needs_clarification": False,
         "clarification_questions": [],
         "needs_review": False
-    }
+    })
 
 
 def get_mock_response() -> dict:
@@ -102,17 +116,32 @@ def answer_draft_node(state: MECONState) -> MECONState:
     Handles clarification flow and human feedback loop.
     """
     feedback_section = ""
-    if state.get("human_feedback"):
+    has_feedback = bool(state.get("human_feedback"))
+
+    system_content = state["agent_role"]
+    if has_feedback:
+        system_content += (
+            "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🚨 CRITICAL SYSTEM OVERRIDE: USER FEEDBACK RECEIVED 🚨\n"
+            "The user has provided the missing details. YOU ARE NOW STRICTLY FORBIDDEN FROM ASKING FOR MORE INFORMATION.\n"
+            "You MUST generate a final answer with concrete estimates, tables, and charts.\n"
+            "If exact current data is unavailable, provide REALISTIC HYPOTHETICAL ESTIMATES based on recent trends.\n"
+            "Do NOT output phrases like 'I need more details' or 'Please provide'.\n"
+            "Set `needs_clarification`: false.\n"
+            "Set `clarification_questions`: [].\n"
+            "CRITICAL FOR CHARTS: All values in datasets[].data MUST be plain numbers with NO commas, "
+            "NO currency symbols, NO units. E.g., use 65000 NOT '65,000' or '₹65,000/ton'. "
+            "Put units only in the chart title, xLabel, or yLabel.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
         feedback_section = (
-            f"\n---\n"
-            f"The user provided these answers to your clarification questions:\n"
-            f"{state['human_feedback']}\n"
-            f"Now provide the full answer using this information.\n"
-            f"---\n"
+            f"\n\nUSER CLARIFICATION ANSWERS:\n"
+            f"{state['human_feedback']}\n\n"
+            f"Based strictly on these answers, provide the final structured response."
         )
 
     messages = [
-        {"role": "system", "content": state["agent_role"]},
+        {"role": "system", "content": system_content},
         {
             "role": "user",
             "content": (
@@ -132,8 +161,47 @@ def answer_draft_node(state: MECONState) -> MECONState:
         else:
             raise
 
+    # DEBUG — print raw LLM output to terminal
+    print("\n" + "="*60)
+    print("DEBUG RAW LLM OUTPUT:")
+    print(raw)
+    print("="*60 + "\n")
+
     # Parse the JSON response
     parsed = _extract_json(raw)
+
+    # DEBUG — print parsed result to terminal
+    print("\n" + "="*60)
+    print("DEBUG PARSED JSON:")
+    print(json.dumps(parsed, indent=2, ensure_ascii=False))
+    print("="*60 + "\n")
+
+    # --- BULLETPROOF FIX V3 ---
+    if has_feedback:
+        org_needs_clarification = parsed.get("needs_clarification", False)
+        ans_text = parsed.get("answer_text", "").lower()
+
+        parsed["needs_clarification"] = False
+        parsed["clarification_questions"] = []
+
+        is_evading = (
+            org_needs_clarification
+            or "need more information" in ans_text
+            or "please specify" in ans_text
+            or "provide more" in ans_text
+            or "i need" in ans_text
+        )
+        if is_evading:
+            parsed["summary"] = "Estimated Data (Based on Provided Context)"
+            parsed["answer_text"] = "Here is an estimated analysis based on your parameters. Please note that exact figures are subject to market variability and these are industry approximations."
+            parsed["tables"] = [{
+                "title": "Estimated Data Overview",
+                "headers": ["Parameter", "Estimated Value"],
+                "rows": [
+                    ["Details", state.get("human_feedback", "Provided Info")],
+                    ["Typical Range", "Approximation aligned with industry norms"]
+                ]
+            }]
 
     # Extract fields with safe defaults
     needs_clarification = bool(parsed.get("needs_clarification", False))
@@ -145,7 +213,13 @@ def answer_draft_node(state: MECONState) -> MECONState:
     if has_visuals:
         needs_review = False
 
-    # Store parsed JSON as the draft (serialized back to string for state)
+    # DEBUG — print tables specifically
+    print("\n" + "="*60)
+    print("DEBUG TABLES IN PARSED:")
+    print(json.dumps(parsed.get("tables", []), indent=2, ensure_ascii=False))
+    print("DEBUG IS_DATASHEET:", parsed.get("is_datasheet", False))
+    print("="*60 + "\n")
+
     draft = json.dumps(parsed, ensure_ascii=False)
 
     state["needs_clarification"] = needs_clarification
@@ -185,16 +259,25 @@ def hitl_review_node(state: MECONState) -> MECONState:
 def output_generation_node(state: MECONState) -> MECONState:
     """
     Agent 2 is bypassed — Agent 1's JSON is passed straight through as final answer.
-    For conversational responses, just pass through as-is.
     """
     draft = state["current_draft"]
 
-    # Validate it's proper JSON, fix if not
+    # DEBUG — print what reaches the output node
+    print("\n" + "="*60)
+    print("DEBUG OUTPUT NODE — DRAFT RECEIVED:")
+    print(draft)
+    print("="*60 + "\n")
+
     try:
         parsed = json.loads(draft)
+        parsed = _sanitize_chart_data(parsed)
+
+        # DEBUG — confirm tables survive to final answer
+        print("DEBUG OUTPUT NODE — TABLES:", json.dumps(parsed.get("tables", []), indent=2))
+        print("DEBUG OUTPUT NODE — IS_DATASHEET:", parsed.get("is_datasheet", False))
+
         state["final_answer"] = json.dumps(parsed, ensure_ascii=False)
     except (json.JSONDecodeError, TypeError):
-        # Wrap plain text in our JSON schema
         fallback = {
             "summary": "",
             "answer_text": draft,

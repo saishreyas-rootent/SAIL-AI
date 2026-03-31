@@ -167,12 +167,49 @@
   .msg-answer-text { margin-bottom: 10px; }
 
   /* TABLE CONTAINER */
-  .tbl-container { margin: 12px 0; }
+  .tbl-container { margin: 12px 0; transition: transform 0.2s ease, box-shadow 0.2s ease; border-radius: 6px; }
+  .tbl-container:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); background: rgba(255,255,255,0.02); }
+
+  /* TABLE HEADER ROW — title + download button */
+  .tbl-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    padding-right: 2px;
+  }
+
   .tbl-title {
     font-size: 11px; font-weight: 600; color: var(--text2);
     font-family: 'DM Mono', monospace; text-transform: uppercase;
-    letter-spacing: 0.05em; margin-bottom: 6px; padding-left: 2px;
+    letter-spacing: 0.05em; padding-left: 2px;
   }
+
+  /* DOWNLOAD BUTTON */
+  .tbl-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    padding: 3px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+  }
+  .tbl-download-btn:hover {
+    background: var(--accent);
+    color: #0d1117;
+  }
+  .tbl-download-btn:active {
+    transform: scale(0.97);
+  }
+
   .tbl-scroll { overflow-x: auto; border-radius: 6px; }
   .tbl-scroll::-webkit-scrollbar { height: 3px; }
   .tbl-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -187,8 +224,9 @@
     padding: 6px 10px; border: 1px solid var(--border2);
     color: var(--text); vertical-align: top; white-space: nowrap;
   }
+  .spec-table tr td { transition: background-color 0.2s ease; align-items: center; }
   .spec-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
-  .spec-table tr:hover td { background: rgba(232,168,76,0.04); }
+  .spec-table tr:hover td { background: rgba(232,168,76,0.1); color: #fff; }
   .spec-table tr.total-row td {
     background: rgba(232,168,76,0.08) !important;
     color: var(--accent) !important; font-weight: 600;
@@ -208,7 +246,7 @@
   .chart-wrap { position: relative; width: 100%; }
   .chart-wrap canvas { max-width: 100%; display: block; }
 
-  /* ── CLARIFICATION CARD ── */
+  /* CLARIFICATION CARD */
   .clarify-bubble {
     background: var(--bg2) !important;
     border: 1px solid var(--blue) !important;
@@ -257,9 +295,9 @@
   }
   .typing span:nth-child(2) { animation-delay: 0.2s; }
   .typing span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes dot-blink { 
-    0%, 100% { opacity: 0.3; transform: scale(0.8); } 
-    50% { opacity: 1; transform: scale(1.1); } 
+  @keyframes dot-blink {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); }
   }
 
   /* TYPING EFFECT CURSOR */

@@ -10,6 +10,8 @@
     rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=5" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 
 <body>
@@ -72,8 +74,8 @@
       <div class="chat-messages" id="chat-messages">
         <div class="empty-state" id="empty-state">
           <div class="empty-logo">MECON-AI</div>
-          <div class="empty-sub">RAG-powered assistant for technical specifications, datasheets, price estimates and BOQ
-            generation across MECON's steel project knowledge base.</div>
+          <div class="empty-sub">RAG-powered assistant for technical specifications, datasheets, and price estimates
+            across MECON's steel project knowledge base.</div>
           <div class="suggestions" id="suggestions">
             <button class="suggestion-chip suggestion">Show production capacity of SAIL plants as a bar chart</button>
             <button class="suggestion-chip suggestion">Compare mechanical properties of IS 2062 steel grades in a
@@ -82,7 +84,7 @@
               80</button>
             <button class="suggestion-chip suggestion">Plot tensile strength comparison across SAIL steel
               grades</button>
-            <button class="suggestion-chip suggestion">Generate a BOQ for structural steel for a warehouse</button>
+
             <button class="suggestion-chip suggestion">Chemical composition of IS 2062 E250 in a pie chart</button>
           </div>
         </div>

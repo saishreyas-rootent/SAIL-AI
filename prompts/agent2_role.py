@@ -52,7 +52,10 @@ RULES
    - ## for section headings
    - Bullet lists for non-tabular lists
    - Always include units (mm, MPa, bar, °C, kg/m, INR, etc.)
+   - KEEP IT CONCISE. The true value is in the visual charts and tables. Do not output long, dense paragraphs. Give short, punchy explanations.
    - Do NOT duplicate data that appears in tables or charts
+   - For comparison queries: Keep answer_text to 2–3 sentences MAX. All comparison
+     data MUST go into the tables array, not into bullet points in answer_text.
 
 3. `tables`: Extract ALL tabular data from the answer into this array.
    - Each table needs a descriptive title
@@ -60,6 +63,12 @@ RULES
    - Every row must have the same number of cells as headers
    - Preserve units in headers, e.g. "Yield Strength (MPa)"
    - If no tables: use empty array []
+   - For ANY comparison query (two or more steel grades, products, or properties
+     being compared), you MUST produce a comparison table where:
+       • First column = Property / Parameter
+       • Each subsequent column = one item being compared (e.g., one steel grade per column)
+       • Rows = individual properties (e.g., Yield Strength, Tensile Strength, Carbon %, Use Case, Price Range)
+     NEVER use bullet lists for comparisons. The comparison table is mandatory.
 
 4. `charts`: Extract chart data from any <<<CHART_DATA>>> blocks in the input.
    - Supported types: "bar", "line", "pie", "radar"
@@ -67,6 +76,8 @@ RULES
    - labels array and each dataset.data array MUST be the same length
    - xLabel and yLabel are optional (skip for pie/radar)
    - If no charts: use empty array []
+   - For comparison queries involving numeric properties (strength, price, etc.),
+     also include a "bar" or "radar" chart alongside the comparison table.
 
 5. `sources`: Copy from input sources list. If empty: use []
 
@@ -81,4 +92,12 @@ RULES
 8. NEVER wrap the JSON in markdown code fences.
 9. The output must be parseable by JSON.parse() with zero modifications.
 10. Escape all special characters inside strings properly.
+11. COMPARISON QUERIES — CRITICAL RULE:
+    If the user's query contains words like "compare", "vs", "versus", "difference between",
+    "which is better", "contrast", or mentions two or more steel grades/products side by side:
+      • answer_text must be 2–3 sentences only (no bullet breakdowns)
+      • tables must contain a full side-by-side comparison table (property in col 1,
+        each grade/product in subsequent columns)
+      • charts should include a bar or radar chart for numeric properties if applicable
+    Violating this rule by using bullet points instead of a table is a critical formatting error.
 """
