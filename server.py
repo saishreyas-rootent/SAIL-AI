@@ -1,0 +1,156 @@
+import os
+import uuid
+import uvicorn
+import traceback
+from typing import Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+from graph.graph import app_graph
+from graph.state import MECONState
+
+load_dotenv()
+
+app = FastAPI(title="MECON-AI API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class ChatRequest(BaseModel):
+    query: str
+    category: str
+    thread_id: str
+
+
+class ReviewRequest(BaseModel):
+    action: str                   # "approve", "refine", or "clarify"
+    feedback: Optional[str] = None
+    thread_id: str
+
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "message": "MECON-AI API is running"}
+
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest):
+    """
+    Starts a fresh thread per message.
+    Returns clarification questions if Agent 1 needs more info,
+    or the final structured JSON answer if complete.
+    """
+    fresh_thread_id = "th_" + uuid.uuid4().hex[:12]
+    config = {"configurable": {"thread_id": fresh_thread_id}}
+
+    initial_input = {
+        "user_query": req.query,
+        "category": req.category,
+    }
+
+    try:
+        final_values = {}
+        for event in app_graph.stream(initial_input, config, stream_mode="values"):
+            final_values = event
+
+        snapshot = app_graph.get_state(config)
+        is_waiting_for_review = bool(snapshot.next and "hitl_review" in snapshot.next)
+
+        # Check if agent needs clarification from user
+        awaiting_clarification = final_values.get("awaiting_clarification", False)
+        clarification_questions = final_values.get("clarification_questions", [])
+
+        # Auto-approve if agent is confident (needs_human_review=False)
+        if is_waiting_for_review and not final_values.get("needs_human_review", False):
+            app_graph.update_state(
+                config,
+                {"human_approved": True, "human_feedback": None},
+            )
+            for event in app_graph.stream(None, config, stream_mode="values"):
+                final_values = event
+            is_waiting_for_review = False
+
+        return {
+            "status": "success",
+            "state": final_values,
+            "is_waiting_for_review": is_waiting_for_review,
+            "awaiting_clarification": awaiting_clarification,
+            "clarification_questions": clarification_questions,
+            "thread_id": fresh_thread_id,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/review")
+async def review(req: ReviewRequest):
+    """
+    Handles three actions:
+    - "approve"  : expert approves the draft
+    - "refine"   : expert requests a revision with feedback
+    - "clarify"  : user answered clarification questions; re-run with answers
+    """
+    config = {"configurable": {"thread_id": req.thread_id}}
+
+    try:
+        if req.action == "approve":
+            app_graph.update_state(
+                config,
+                {"human_approved": True, "human_feedback": None},
+            )
+        elif req.action in ("refine", "clarify"):
+            # For clarify: feedback contains user's answers to the questions
+            app_graph.update_state(
+                config,
+                {
+                    "human_approved": False,
+                    "human_feedback": req.feedback,
+                    "awaiting_clarification": False,
+                    "needs_clarification": False,
+                },
+            )
+        else:
+            app_graph.update_state(
+                config,
+                {"human_approved": False, "human_feedback": req.feedback},
+            )
+
+        final_values = {}
+        for event in app_graph.stream(None, config, stream_mode="values"):
+            final_values = event
+
+        snapshot = app_graph.get_state(config)
+        is_waiting_for_review = bool(snapshot.next and "hitl_review" in snapshot.next)
+        awaiting_clarification = final_values.get("awaiting_clarification", False)
+        clarification_questions = final_values.get("clarification_questions", [])
+
+        return {
+            "status": "success",
+            "state": final_values,
+            "is_waiting_for_review": is_waiting_for_review,
+            "awaiting_clarification": awaiting_clarification,
+            "clarification_questions": clarification_questions,
+            "thread_id": req.thread_id,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if os.path.exists("static"):
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False)

@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap');
+
+:root {
+    --bg-deep: #080a0d;
+    --bg-main: #0d1117;
+    --bg-card: #161b22;
+    --bg-hover: #21262d;
+    --border: #30363d;
+    --border-dim: #21262d;
+    --accent: #e8a84c; /* Amber / MECON Technical Gold */
+    --accent-dim: rgba(232, 168, 76, 0.15);
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-mute: #484f58;
+    --green: #3fb950;
+    --blue: #58a6ff;
+    --sidebar-width: 260px;
+    --panel-width: 320px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Sora', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#root {
+    height: 100%;
+}
+
+/* --- APP LAYOUT --- */
+.app-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* --- SCALABLE COMPONENTS (to be used in React) --- */
+
+.spec-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+.spec-table th { background: var(--bg-deep); color: var(--accent); border: 1px solid var(--border); padding: 8px; text-align: left; }
+.spec-table td { border: 1px solid var(--border-dim); padding: 8px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-mute); }
+
+/* Animation Utils */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+    animation: fadeIn 0.3s ease forwards;
+}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MECON-AI — Technical Data Assistant</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=5" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+
+<body>
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-mark">M</div>
+      <span class="logo-text">MECON-AI</span>
+      <span class="logo-sub">/ Technical Data Assistant</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot"></div>
+      <span class="status-text" id="thread-display">Thread: ---</span>
+      <span class="api-badge" style="border-color: var(--green); color: var(--green); cursor: default;">RAG ·
+        LIVE</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Data Categories</div>
+        <button class="cat-btn active" data-category="All Categories">
+          <div class="cat-dot" style="background:#8b949e"></div>All Categories
+        </button>
+        <button class="cat-btn" data-category="Piping & Valves">
+          <div class="cat-dot" style="background:#58a6ff"></div>Piping & Valves
+        </button>
+        <button class="cat-btn" data-category="Structural Steel">
+          <div class="cat-dot" style="background:#e8a84c"></div>Structural Steel
+        </button>
+        <button class="cat-btn" data-category="Equipment">
+          <div class="cat-dot" style="background:#3fb950"></div>Equipment
+        </button>
+        <button class="cat-btn" data-category="BF & Process">
+          <div class="cat-dot" style="background:#f85149"></div>BF & Process
+        </button>
+        <button class="cat-btn" data-category="Price Schedules">
+          <div class="cat-dot" style="background:#bc8cff"></div>Price Schedules
+        </button>
+        <button class="cat-btn" data-category="E&I / Civil">
+          <div class="cat-dot" style="background:#39d353"></div>E&I / Civil
+        </button>
+      </div>
+      <hr class="sidebar-divider" />
+      <div class="sidebar-section">
+        <div class="sidebar-label">Recent Chats</div>
+      </div>
+      <div id="history-list"></div>
+      <div style="flex:1"></div>
+      <button class="new-chat-btn" id="new-chat-btn">+ New Chat</button>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div class="chat-panel">
+      <div class="chat-messages" id="chat-messages">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-logo">MECON-AI</div>
+          <div class="empty-sub">RAG-powered assistant for technical specifications, datasheets, price estimates and BOQ
+            generation across MECON's steel project knowledge base.</div>
+          <div class="suggestions" id="suggestions">
+            <button class="suggestion-chip suggestion">Show production capacity of SAIL plants as a bar chart</button>
+            <button class="suggestion-chip suggestion">Compare mechanical properties of IS 2062 steel grades in a
+              table</button>
+            <button class="suggestion-chip suggestion">Wall thickness table for 2–8 inch CS pipes SCH 40 and SCH
+              80</button>
+            <button class="suggestion-chip suggestion">Plot tensile strength comparison across SAIL steel
+              grades</button>
+            <button class="suggestion-chip suggestion">Generate a BOQ for structural steel for a warehouse</button>
+            <button class="suggestion-chip suggestion">Chemical composition of IS 2062 E250 in a pie chart</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-wrap">
+          <textarea class="chat-input" id="chat-input" rows="1"
+            placeholder="Ask about specs, datasheets, steel grades, BOQ, charts…"></textarea>
+          <button class="send-btn" id="send-btn">↑</button>
+        </div>
+        <div class="input-hint">Smart clarification enabled — the bot will ask follow-up questions only when needed.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js?v=5"></script>
+</body>
+
+</html>
