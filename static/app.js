@@ -1,6 +1,6 @@
 /**
  * MECON-AI Professional Web Interface
- * Updated: clarification sub-questions, structured JSON rendering, Chart.js charts
+ * Fixed: initChart type variable, dark mode chart colors, all rendering bugs
  */
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
@@ -12,15 +12,12 @@ let chatHistory = JSON.parse(localStorage.getItem('mecon_history') || '[]');
 let chartInstances = {};
 
 // ─── UI ELEMENTS ─────────────────────────────────────────────────────────────
-const chatMsgs      = document.getElementById('chat-messages');
-const userInput     = document.getElementById('chat-input');
-const sendBtn       = document.getElementById('send-btn');
-const threadDisplay = document.getElementById('thread-display');
-const emptyState    = document.getElementById('empty-state');
-const sourcesView   = document.getElementById('panel-sources');
-const traceView     = document.getElementById('panel-trace');
+const chatMsgs = document.getElementById('chat-messages');
+const userInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const emptyState = document.getElementById('empty-state');
+const newChatBtn = document.getElementById('new-chat-btn');
 
-if (threadDisplay) threadDisplay.textContent = 'Thread: ready';
 renderHistory();
 
 // ─── CATEGORY NAV ────────────────────────────────────────────────────────────
@@ -31,7 +28,6 @@ document.querySelectorAll('.cat-btn').forEach(btn => {
         currentCategory = btn.getAttribute('data-category');
     });
 });
-
 
 // ─── EVENT LISTENERS ─────────────────────────────────────────────────────────
 if (sendBtn) sendBtn.addEventListener('click', sendMessage);
@@ -45,11 +41,10 @@ if (userInput) {
     });
 }
 
-const newChatBtn = document.getElementById('new-chat-btn');
 if (newChatBtn) {
     newChatBtn.addEventListener('click', () => {
         currentThreadId = null;
-        Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
+        Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch (e) { } });
         chartInstances = {};
         localStorage.removeItem('mecon_history');
         window.location.reload();
@@ -58,8 +53,10 @@ if (newChatBtn) {
 
 document.querySelectorAll('.suggestion').forEach(s => {
     s.addEventListener('click', () => {
-        if (userInput) userInput.value = s.textContent;
-        sendMessage();
+        if (userInput) {
+            userInput.value = s.querySelector('.sug-text') ? s.querySelector('.sug-text').textContent : s.textContent;
+            sendMessage();
+        }
     });
 });
 
@@ -75,7 +72,7 @@ function renderHistory() {
     const list = document.getElementById('history-list');
     if (list) {
         list.innerHTML = chatHistory.slice(0, 6).map(h =>
-            `<div class="history-item" title="${escapeHtml(h.query)}">${escapeHtml(h.query)}…</div>`
+            `<div class="history-item" title="${escapeHtml(h.query)}">${escapeHtml(h.query)}</div>`
         ).join('');
     }
 }
@@ -85,7 +82,9 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text || isProcessing) return;
 
-    if (emptyState) emptyState.remove();
+    const es = document.getElementById('empty-state');
+    if (es) es.remove();
+
     userInput.value = '';
     userInput.style.height = 'auto';
     isProcessing = true;
@@ -111,10 +110,7 @@ async function sendMessage() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'Server error');
 
-        if (data.thread_id) {
-            currentThreadId = data.thread_id;
-            if (threadDisplay) threadDisplay.textContent = `Thread: ${data.thread_id.substring(3, 11)}`;
-        }
+        if (data.thread_id) currentThreadId = data.thread_id;
 
         removeTyping();
         handleApiResponse(data);
@@ -139,15 +135,14 @@ function stopRequest() {
 }
 
 function toggleProcessingState(busy) {
-    toggleInput(!busy);
     if (sendBtn) {
         if (busy) {
-            sendBtn.innerHTML = '■';
-            sendBtn.style.background = 'var(--red, #e53935)';
+            sendBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect width="12" height="12" rx="2"/></svg>`;
+            sendBtn.style.background = 'var(--red)';
             sendBtn.onclick = stopRequest;
         } else {
-            sendBtn.innerHTML = '↑';
-            sendBtn.style.background = 'var(--accent)';
+            sendBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 12V2M2 7l5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            sendBtn.style.background = '';
             sendBtn.onclick = sendMessage;
         }
     }
@@ -162,7 +157,7 @@ function handleApiResponse(data) {
 
     const state = data.state;
 
-    // 1. Clarification needed — show sub-questions card
+    // 1. Clarification needed
     if (data.awaiting_clarification && data.clarification_questions && data.clarification_questions.length) {
         const parsed = tryParseJson(state.current_draft);
         const intro = parsed ? (parsed.answer_text || '') : '';
@@ -178,7 +173,7 @@ function handleApiResponse(data) {
         return;
     }
 
-    // 3. Final answer — render structured JSON
+    // 3. Final answer
     if (state.final_answer) {
         appendStructuredMessage(state.final_answer, state.sources, true);
     } else if (state.current_draft) {
@@ -188,18 +183,13 @@ function handleApiResponse(data) {
     }
 }
 
-// ─── CLARIFICATION CARD ───────────────────────────────────────────────────────
-/**
- * Renders a friendly card with up to 3 input fields for sub-questions.
- * On submit, packages answers and sends via /api/review with action="clarify".
- */
+// ─── CLARIFICATION CARD ──────────────────────────────────────────────────────
 function appendClarificationCard(introText, questions) {
     const cardId = 'clarify_' + Date.now();
     const div = document.createElement('div');
     div.className = 'msg bot';
     div.id = cardId;
 
-    // Build input fields for each question
     const questionFields = questions.map((q, i) => `
         <div class="clarify-question">
             <div class="clarify-q-label">${escapeHtml(q)}</div>
@@ -208,7 +198,6 @@ function appendClarificationCard(introText, questions) {
                 class="clarify-input"
                 id="${cardId}_q${i}"
                 placeholder="Your answer…"
-                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); submitClarification('${cardId}', ${JSON.stringify(questions).replace(/'/g, "\\'")}); }"
             />
         </div>
     `).join('');
@@ -217,18 +206,16 @@ function appendClarificationCard(introText, questions) {
         ? `<div class="clarify-intro">${renderMarkdown(introText)}</div>`
         : '';
 
+    const questionsJson = JSON.stringify(questions);
+
     div.innerHTML = `
         <div class="msg-avatar">AI</div>
         <div class="msg-body" style="max-width:85%">
             <div class="msg-bubble clarify-bubble">
                 ${introHtml}
-                <div class="clarify-questions-wrap">
-                    ${questionFields}
-                </div>
+                <div class="clarify-questions-wrap">${questionFields}</div>
                 <div class="clarify-actions">
-                    <button class="clarify-submit-btn" onclick="submitClarification('${cardId}', ${JSON.stringify(questions).replace(/'/g, "\\'")})">
-                        ↑ Send Answers
-                    </button>
+                    <button class="clarify-submit-btn" id="${cardId}_btn">↑ Send Answers</button>
                 </div>
             </div>
         </div>`;
@@ -236,12 +223,28 @@ function appendClarificationCard(introText, questions) {
     if (chatMsgs) {
         chatMsgs.appendChild(div);
         chatMsgs.scrollTop = chatMsgs.scrollHeight;
-        // Focus first input
-        setTimeout(() => {
-            const first = document.getElementById(`${cardId}_q0`);
-            if (first) first.focus();
-        }, 100);
     }
+
+    // Attach events after DOM insertion (no inline onclick)
+    document.getElementById(`${cardId}_btn`).addEventListener('click', () => {
+        submitClarification(cardId, questions);
+    });
+    questions.forEach((_, i) => {
+        const inp = document.getElementById(`${cardId}_q${i}`);
+        if (inp) {
+            inp.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitClarification(cardId, questions);
+                }
+            });
+        }
+    });
+
+    setTimeout(() => {
+        const first = document.getElementById(`${cardId}_q0`);
+        if (first) first.focus();
+    }, 100);
 }
 
 async function submitClarification(cardId, questions) {
@@ -250,43 +253,31 @@ async function submitClarification(cardId, questions) {
         return;
     }
 
-    // Collect answers from all input fields
-    const answers = questions.map((q, i) => {
+    const answers = questions.map((_, i) => {
         const input = document.getElementById(`${cardId}_q${i}`);
         return input ? input.value.trim() : '';
     });
 
-    // Check at least one answer is given
     if (answers.every(a => !a)) {
         const firstInput = document.getElementById(`${cardId}_q0`);
         if (firstInput) firstInput.focus();
         return;
     }
 
-    // Disable the card
     const card = document.getElementById(cardId);
     if (card) {
         const bubble = card.querySelector('.clarify-bubble');
         if (bubble) {
             bubble.style.opacity = '0.5';
             bubble.style.pointerEvents = 'none';
-            // Show submitted answers summary
-            const summary = questions.map((q, i) =>
-                answers[i] ? `**${q}**\n${answers[i]}` : null
-            ).filter(Boolean).join('\n\n');
-            bubble.innerHTML = `<div class="clarify-submitted">
-                <span class="clarify-submitted-icon">✓</span>
-                Answers submitted — generating your response…
-            </div>`;
+            bubble.innerHTML = `<div class="clarify-submitted"><span class="clarify-submitted-icon">✓</span> Answers submitted — generating your response…</div>`;
         }
     }
 
-    // Build feedback string combining Q+A pairs
     const feedbackText = questions.map((q, i) =>
         `Q: ${q}\nA: ${answers[i] || '(not provided)'}`
     ).join('\n\n');
 
-    // Show user's answers as a message
     const answersDisplay = answers.filter(Boolean).join(' · ');
     appendMessage('user', answersDisplay);
     addTyping();
@@ -334,7 +325,7 @@ function appendStructuredMessage(content, sources, animate = false) {
         <div class="msg-avatar">AI</div>
         <div class="msg-body">
             <div class="msg-bubble" id="${msgId}-bubble"></div>
-            <div id="${msgId}-extras" style="display: ${animate ? 'none' : 'block'}"></div>
+            <div id="${msgId}-extras" style="display:none"></div>
         </div>`;
 
     if (chatMsgs) {
@@ -347,12 +338,8 @@ function appendStructuredMessage(content, sources, animate = false) {
 
     if (animate) {
         const sequence = [];
-        if (parsed.summary) {
-            sequence.push({ type: 'summary', text: parsed.summary });
-        }
-        if (parsed.answer_text) {
-            sequence.push({ type: 'answer', text: parsed.answer_text });
-        }
+        if (parsed.summary) sequence.push({ type: 'summary', text: parsed.summary });
+        if (parsed.answer_text) sequence.push({ type: 'answer', text: parsed.answer_text });
 
         runAnimationSequence(bubble, sequence, () => {
             renderExtras(extrasArea, parsed, sources, msgId);
@@ -362,6 +349,7 @@ function appendStructuredMessage(content, sources, animate = false) {
         });
     } else {
         renderFullStructured(bubble, extrasArea, parsed, sources, msgId);
+        extrasArea.style.display = 'block';
     }
 }
 
@@ -379,13 +367,13 @@ function renderFullStructured(bubbleElement, extrasElement, parsed, sources, msg
 
 function renderExtras(container, parsed, sources, msgId) {
     let html = '';
-    // Tables
+
     if (parsed.tables && parsed.tables.length) {
         parsed.tables.forEach((tbl, ti) => {
             html += buildTableHtml(tbl, `${msgId}_tbl${ti}`);
         });
     }
-    // Charts
+
     if (parsed.charts && parsed.charts.length) {
         parsed.charts.forEach((chart, ci) => {
             const canvasId = `${msgId}_chart${ci}`;
@@ -393,12 +381,12 @@ function renderExtras(container, parsed, sources, msgId) {
                 <div class="chart-container">
                     <div class="chart-title">${escapeHtml(chart.title || '')}</div>
                     <div class="chart-wrap">
-                        <canvas id="${canvasId}" height="220"></canvas>
+                        <canvas id="${canvasId}"></canvas>
                     </div>
                 </div>`;
         });
     }
-    // Sources
+
     const srcArray = (parsed.sources && parsed.sources.length) ? parsed.sources : (sources || []);
     if (Array.isArray(srcArray) && srcArray.length) {
         const chips = srcArray.map(s =>
@@ -411,7 +399,7 @@ function renderExtras(container, parsed, sources, msgId) {
 
     container.innerHTML = html;
 
-    // Init charts
+    // Init charts AFTER html is in DOM
     if (parsed.charts && parsed.charts.length) {
         parsed.charts.forEach((chart, ci) => {
             initChart(`${msgId}_chart${ci}`, chart);
@@ -434,10 +422,9 @@ function runAnimationSequence(container, sequence, callback) {
     if (item.type === 'summary') {
         const fullTxt = item.text;
         typeEffect(subDiv, fullTxt, 15, () => {
-            // Summary doesn't need markdown render usually but we can use escapeHtml then wrap
             subDiv.innerHTML = escapeHtml(fullTxt);
             runAnimationSequence(container, sequence, callback);
-        }, true); // true for summary mode (no markdown)
+        }, true);
     } else {
         typeEffect(subDiv, item.text, 12, () => {
             runAnimationSequence(container, sequence, callback);
@@ -446,34 +433,58 @@ function runAnimationSequence(container, sequence, callback) {
 }
 
 function typeEffect(element, rawText, speed = 10, callback, plainText = false) {
-    let i = 0;
     const cursor = document.createElement('span');
     cursor.className = 'typing-cursor';
     element.appendChild(cursor);
 
+    let tokens = [];
+    if (rawText.length > 300) {
+        // Half a sentence at a time
+        const words = rawText.split(/ /);
+        for (let j = 0; j < words.length; j += 6) {
+            tokens.push(words.slice(j, j + 6).join(' ') + ' ');
+        }
+    } else if (rawText.length > 80) {
+        // Word by word
+        const words = rawText.split(/ /);
+        for (let j = 0; j < words.length; j++) {
+            tokens.push(words[j] + ' ');
+        }
+    } else {
+        // Letter by letter
+        tokens = rawText.split('');
+    }
+
+    let currentText = '';
+    let i = 0;
+
+    let currentSpeed = speed;
+    if (rawText.length > 300) currentSpeed = 30; // Wait longer between big chunks
+    else if (rawText.length > 80) currentSpeed = 15; // Moderate for words
+    else currentSpeed = 5; // Very fast for letters
+
     const interval = setInterval(() => {
-        if (i < rawText.length) {
-            i++;
-            const currentText = rawText.substring(0, i);
+        if (i < tokens.length) {
+            currentText += tokens[i];
             element.innerHTML = plainText ? escapeHtml(currentText) : renderMarkdown(currentText);
             element.appendChild(cursor);
-            chatMsgs.scrollTop = chatMsgs.scrollHeight;
+            if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
+            i++;
         } else {
             clearInterval(interval);
             cursor.remove();
+            element.innerHTML = plainText ? escapeHtml(rawText) : renderMarkdown(rawText);
             if (callback) callback();
         }
-    }, speed);
+    }, currentSpeed);
 }
 
 // ─── TABLE BUILDER ────────────────────────────────────────────────────────────
 function buildTableHtml(tbl, id) {
     if (!tbl.headers || !tbl.rows) return '';
-    const title = tbl.title
-        ? `<div class="tbl-title">${escapeHtml(tbl.title)}</div>` : '';
+    const title = tbl.title ? `<div class="tbl-title">${escapeHtml(tbl.title)}</div>` : '';
     const ths = tbl.headers.map(h => `<th>${escapeHtml(String(h))}</th>`).join('');
-    const trs = tbl.rows.map((row, ri) => {
-        // Highlight total rows
+    const trs = tbl.rows.map(row => {
         const isTotal = row[0] && String(row[0]).toLowerCase().includes('total');
         const rowClass = isTotal ? ' class="total-row"' : '';
         const tds = row.map(cell => `<td>${escapeHtml(String(cell ?? ''))}</td>`).join('');
@@ -491,23 +502,34 @@ function buildTableHtml(tbl, id) {
         </div>`;
 }
 
-// ─── CHART.JS INITIALIZER ─────────────────────────────────────────────────────
+// ─── CHART.JS INITIALIZER (FIXED) ─────────────────────────────────────────────
 function initChart(canvasId, chartDef) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
+    // ✅ FIX: extract type from chartDef FIRST before any usage
+    const type = chartDef.type || 'bar';
+
     if (chartInstances[canvasId]) {
-        try { chartInstances[canvasId].destroy(); } catch(e) {}
+        try { chartInstances[canvasId].destroy(); } catch (e) { }
+        delete chartInstances[canvasId];
     }
 
-    const type = chartDef.type || 'bar';
-    const gridColor = 'rgba(48,54,61,0.8)';
-    const textColor = '#8b949e';
+    // Resolve theme-aware colors from CSS variables
+    const isDark = document.body.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+    const textColor = isDark ? '#9ca3af' : '#6b7280';
+    const tooltipBg = isDark ? '#1e2433' : '#ffffff';
+    const tooltipBorder = isDark ? '#2d3548' : '#e5e7eb';
+    const tooltipTitle = isDark ? '#f1f5f9' : '#0f1117';
+    const tooltipBody = isDark ? '#94a3b8' : '#6b7280';
+
     const accentColors = [
-        '#e8a84c', '#58a6ff', '#3fb950', '#f85149',
-        '#bc8cff', '#39d353', '#ffa657', '#79c0ff'
+        '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+        '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'
     ];
 
+    // ✅ FIX: type is now defined before this map runs
     const datasets = (chartDef.datasets || []).map((ds, i) => {
         const color = ds.color || accentColors[i % accentColors.length];
 
@@ -516,7 +538,7 @@ function initChart(canvasId, chartDef) {
                 label: ds.label || '',
                 data: ds.data || [],
                 backgroundColor: (ds.data || []).map((_, j) => accentColors[j % accentColors.length]),
-                borderColor: '#161b22',
+                borderColor: isDark ? '#1e2433' : '#ffffff',
                 borderWidth: 2,
                 hoverOffset: 8
             };
@@ -537,16 +559,16 @@ function initChart(canvasId, chartDef) {
         return {
             label: ds.label || '',
             data: ds.data || [],
-            backgroundColor: type === 'bar' ? hexToRgba(color, 0.75) : hexToRgba(color, 0.12),
+            backgroundColor: type === 'bar' ? hexToRgba(color, 0.8) : hexToRgba(color, 0.12),
             borderColor: color,
             borderWidth: type === 'bar' ? 0 : 2,
-            borderRadius: type === 'bar' ? 4 : 0,
+            borderRadius: type === 'bar' ? 5 : 0,
             fill: type === 'line',
             tension: 0.35,
             pointBackgroundColor: color,
             pointRadius: type === 'line' ? 4 : 0,
             pointHoverRadius: 6,
-            hoverBackgroundColor: type === 'bar' ? hexToRgba(color, 1) : undefined
+            hoverBackgroundColor: type === 'bar' ? color : undefined
         };
     });
 
@@ -557,39 +579,50 @@ function initChart(canvasId, chartDef) {
         data: { labels: chartDef.labels || [], datasets },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
-            animation: { duration: 600, easing: 'easeOutQuart' },
+            maintainAspectRatio: false,
+            animation: {
+                duration: 900,
+                easing: 'easeOutCubic',
+                delay: (ctx) => {
+                    if (ctx.type === 'data' && ctx.mode === 'default') {
+                        return ctx.dataIndex * 40;
+                    }
+                    return 0;
+                }
+            },
             plugins: {
                 legend: {
                     display: datasets.length > 1 || type === 'pie',
                     position: type === 'pie' ? 'right' : 'top',
                     labels: {
                         color: textColor,
-                        font: { family: "'DM Mono', monospace", size: 10 },
+                        font: { family: "'Geist Mono', monospace", size: 11 },
                         boxWidth: 12,
-                        padding: 12
+                        padding: 14,
+                        usePointStyle: type !== 'pie'
                     }
                 },
                 tooltip: {
-                    backgroundColor: '#1c2330',
-                    borderColor: '#30363d',
+                    backgroundColor: tooltipBg,
+                    borderColor: tooltipBorder,
                     borderWidth: 1,
-                    titleColor: '#e6edf3',
-                    bodyColor: '#8b949e',
-                    titleFont: { family: "'Sora', sans-serif", size: 12 },
-                    bodyFont: { family: "'DM Mono', monospace", size: 11 },
+                    titleColor: tooltipTitle,
+                    bodyColor: tooltipBody,
+                    titleFont: { family: "'Geist', sans-serif", size: 12, weight: '600' },
+                    bodyFont: { family: "'Geist Mono', monospace", size: 11 },
                     padding: 10,
-                    cornerRadius: 6,
+                    cornerRadius: 8,
                     callbacks: {
                         label: ctx => {
                             const val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
-                            return ` ${ctx.dataset.label || ''}: ${val}`;
+                            return `  ${ctx.dataset.label || ''}: ${val}`;
                         }
                     }
                 }
             },
-            scales: isPolar ? buildPolarScales(type, textColor, gridColor)
-                            : buildCartesianScales(textColor, gridColor, chartDef)
+            scales: isPolar
+                ? buildPolarScales(type, textColor, gridColor)
+                : buildCartesianScales(textColor, gridColor, chartDef)
         }
     };
 
@@ -602,18 +635,23 @@ function buildCartesianScales(textColor, gridColor, chartDef) {
             grid: { color: gridColor, drawBorder: false },
             ticks: {
                 color: textColor,
-                font: { family: "'DM Mono', monospace", size: 10 },
-                maxRotation: 45, autoSkip: true, maxTicksLimit: 12
+                font: { family: "'Geist Mono', monospace", size: 10 },
+                maxRotation: 45,
+                autoSkip: true,
+                maxTicksLimit: 12
             },
             title: chartDef.xLabel
-                ? { display: true, text: chartDef.xLabel, color: textColor, font: { family: "'Sora', sans-serif", size: 11 } }
+                ? { display: true, text: chartDef.xLabel, color: textColor, font: { family: "'Geist', sans-serif", size: 11 } }
                 : { display: false }
         },
         y: {
             grid: { color: gridColor, drawBorder: false },
-            ticks: { color: textColor, font: { family: "'DM Mono', monospace", size: 10 } },
+            ticks: {
+                color: textColor,
+                font: { family: "'Geist Mono', monospace", size: 10 }
+            },
             title: chartDef.yLabel
-                ? { display: true, text: chartDef.yLabel, color: textColor, font: { family: "'Sora', sans-serif", size: 11 } }
+                ? { display: true, text: chartDef.yLabel, color: textColor, font: { family: "'Geist', sans-serif", size: 11 } }
                 : { display: false }
         }
     };
@@ -625,7 +663,7 @@ function buildPolarScales(type, textColor, gridColor) {
             r: {
                 grid: { color: gridColor },
                 angleLines: { color: gridColor },
-                pointLabels: { color: textColor, font: { family: "'DM Mono', monospace", size: 10 } },
+                pointLabels: { color: textColor, font: { family: "'Geist Mono', monospace", size: 10 } },
                 ticks: { color: textColor, backdropColor: 'transparent', font: { size: 9 } }
             }
         };
@@ -634,13 +672,15 @@ function buildPolarScales(type, textColor, gridColor) {
 }
 
 function hexToRgba(hex, alpha) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ─── EXPERT REVIEW CARD (for rare needs_review=true cases) ───────────────────
+// ─── EXPERT REVIEW CARD ───────────────────────────────────────────────────────
 async function submitReview(action, feedback = null) {
     if (!currentThreadId) {
         appendMessage('bot', '⚠ Session lost — please send your message again.');
@@ -654,7 +694,7 @@ async function submitReview(action, feedback = null) {
         lastReview.style.pointerEvents = 'none';
         lastReview.innerHTML = action === 'approve'
             ? '<div class="review-header" style="color:var(--green)">✓ Approved — generating final answer…</div>'
-            : '<div class="review-header" style="color:var(--accent)">↻ Revision requested…</div>';
+            : '<div class="review-header">↻ Revision requested…</div>';
     }
 
     addTyping();
@@ -684,35 +724,44 @@ async function submitReview(action, feedback = null) {
 function appendReviewMessage(draft) {
     const div = document.createElement('div');
     div.className = 'msg bot';
+    const reviewId = 'review_' + Date.now();
     div.innerHTML = `
         <div class="msg-avatar">E1</div>
         <div class="msg-body">
             <div class="msg-bubble">${renderMarkdown(draft)}</div>
-            <div class="review-card">
+            <div class="review-card" id="${reviewId}">
                 <div class="review-header">⚠ Expert Review Required</div>
-                <textarea class="review-feedback-input" id="feedback-txt"
+                <textarea class="review-feedback-input" id="${reviewId}_txt"
                     placeholder="Add refinement instructions if needed…"></textarea>
                 <div class="review-actions">
-                    <button class="rev-btn refine"
-                        onclick="submitReview('refine', document.getElementById('feedback-txt').value)">
-                        ↻ Refine
-                    </button>
-                    <button class="rev-btn approve" onclick="submitReview('approve')">
-                        ✓ Approve
-                    </button>
+                    <button class="rev-btn refine" id="${reviewId}_refine">↻ Refine</button>
+                    <button class="rev-btn approve" id="${reviewId}_approve">✓ Approve</button>
                 </div>
             </div>
         </div>`;
-    if (chatMsgs) { chatMsgs.appendChild(div); chatMsgs.scrollTop = chatMsgs.scrollHeight; }
+
+    if (chatMsgs) {
+        chatMsgs.appendChild(div);
+        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    }
+
+    document.getElementById(`${reviewId}_approve`).addEventListener('click', () => {
+        submitReview('approve');
+    });
+    document.getElementById(`${reviewId}_refine`).addEventListener('click', () => {
+        const fb = document.getElementById(`${reviewId}_txt`).value;
+        submitReview('refine', fb);
+    });
 }
 
 // ─── UI HELPERS ──────────────────────────────────────────────────────────────
 function toggleInput(enabled) {
     if (userInput) userInput.disabled = !enabled;
-    if (sendBtn)   sendBtn.disabled   = !enabled;
+    if (sendBtn) sendBtn.disabled = !enabled;
 }
 
 function addTyping() {
+    removeTyping(); // prevent duplicates
     const div = document.createElement('div');
     div.className = 'msg bot';
     div.id = 'typing-indicator';
@@ -750,37 +799,31 @@ function appendMessage(role, content, sources, animate = false) {
     const bubble = div.querySelector('.msg-bubble');
     if (role === 'bot' && animate) {
         typeEffect(bubble, content, 20, () => {
-            // Render sources after typing is done
             if (Array.isArray(sources) && sources.length) {
-                const chips = sources.map(s =>
-                    `<span class="source-chip" title="${escapeHtml(s.source || s)}">
-                        ${escapeHtml((s.source || s).split('—')[0].trim())}
-                    </span>`
-                ).join('');
-                const sourceContainer = document.createElement('div');
-                sourceContainer.className = 'msg-source fade-in';
-                sourceContainer.style.marginTop = '8px';
-                sourceContainer.innerHTML = `Sources: ${chips}`;
-                div.querySelector('.msg-body').appendChild(sourceContainer);
-                chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                appendSources(div.querySelector('.msg-body'), sources);
             }
         });
     } else {
         bubble.innerHTML = role === 'bot' ? renderMarkdown(content) : escapeHtml(content);
         if (role === 'bot' && Array.isArray(sources) && sources.length) {
-            const chips = sources.map(s =>
-                `<span class="source-chip" title="${escapeHtml(s.source || s)}">
-                    ${escapeHtml((s.source || s).split('—')[0].trim())}
-                </span>`
-            ).join('');
-            const sourceContainer = document.createElement('div');
-            sourceContainer.className = 'msg-source';
-            sourceContainer.style.marginTop = '8px';
-            sourceContainer.innerHTML = `Sources: ${chips}`;
-            div.querySelector('.msg-body').appendChild(sourceContainer);
+            appendSources(div.querySelector('.msg-body'), sources);
         }
-        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+        if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
     }
+}
+
+function appendSources(bodyEl, sources) {
+    const chips = sources.map(s =>
+        `<span class="source-chip" title="${escapeHtml(s.source || s)}">
+            ${escapeHtml((s.source || s).split('—')[0].trim())}
+        </span>`
+    ).join('');
+    const sc = document.createElement('div');
+    sc.className = 'msg-source fade-in';
+    sc.style.marginTop = '8px';
+    sc.innerHTML = `Sources: ${chips}`;
+    bodyEl.appendChild(sc);
+    if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 
 function tryParseJson(text) {
@@ -796,7 +839,6 @@ function tryParseJson(text) {
         return null;
     }
 }
-
 
 function escapeHtml(text) {
     const d = document.createElement('div');
@@ -820,16 +862,38 @@ function renderMarkdown(text) {
 
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/^### (.+)$/gm, '<strong style="color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:.05em">$1</strong>');
-    html = html.replace(/^## (.+)$/gm,  '<strong style="color:var(--text);font-size:13px">$1</strong>');
-    html = html.replace(/^# (.+)$/gm,   '<strong style="color:var(--text);font-size:14px">$1</strong>');
+    html = html.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>');
     html = html.replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>)/gs, '<ul style="margin:4px 0 4px 16px;padding:0">$1</ul>');
+    html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, m => `<ul>${m}</ul>`);
     html = html.replace(/\n/g, '<br/>');
 
     return html;
 }
 
-// Expose for inline onclick handlers
+// Expose for any legacy references
 window.submitReview = submitReview;
 window.submitClarification = submitClarification;
+
+// ─── THEME TOGGLE ────────────────────────────────────────────────────────────
+const themeToggle = document.getElementById('theme-toggle');
+const moonIcon = document.getElementById('moon-icon');
+const sunIcon = document.getElementById('sun-icon');
+
+if (localStorage.getItem('mecon_theme') === 'dark') {
+    document.body.classList.add('dark');
+    if (moonIcon) moonIcon.style.display = 'none';
+    if (sunIcon) sunIcon.style.display = 'block';
+}
+
+if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('dark');
+        localStorage.setItem('mecon_theme', isDark ? 'dark' : 'light');
+        if (moonIcon && sunIcon) {
+            moonIcon.style.display = isDark ? 'none' : 'block';
+            sunIcon.style.display = isDark ? 'block' : 'none';
+        }
+    });
+}

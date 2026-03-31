@@ -2,12 +2,17 @@ import os
 import uuid
 import uvicorn
 import traceback
+import warnings
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+# Suppress Pydantic/LangChain deprecation warnings from showing in terminal
+warnings.filterwarnings("ignore", category=UserWarning, module="langchain_core")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 from graph.graph import app_graph
 from graph.state import MECONState
@@ -15,6 +20,11 @@ from graph.state import MECONState
 load_dotenv()
 
 app = FastAPI(title="MECON-AI API")
+
+# Fix favicon 404 error in terminal
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 app.add_middleware(
     CORSMiddleware,
