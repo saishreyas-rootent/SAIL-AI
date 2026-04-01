@@ -20,12 +20,101 @@ const newChatBtn = document.getElementById('new-chat-btn');
 
 renderHistory();
 
+// ─── SUGESTIONS DATA ─────────────────────────────────────────────────────────
+const categorySuggestions = {
+    "All Categories": [
+        { label: "Production Capacity", text: "Show production capacity of SAIL plants as a bar chart", wide: true },
+        { label: "Grade Comparison", text: "Compare mechanical properties of IS 2062 steel grades" },
+        { label: "Pipe Schedule", text: "Wall thickness table for 2–8 inch CS pipes SCH 40 & 80" },
+        { label: "BOQ Generation", text: "Generate a BOQ for structural steel for a warehouse" },
+        { label: "Composition Chart", text: "Chemical composition of IS 2062 E250 as a pie chart" }
+    ],
+    "Piping & Valves": [
+        { label: "Pipe Schedule", text: "Wall thickness table for 2–8 inch CS pipes SCH 40 & 80", wide: true },
+        { label: "Valve Selection", text: "Recommended valves for high-pressure steam lines?" },
+        { label: "Flange Ratings", text: "Extract flange rating chart for ASME B16.5 Class 150 to 900" },
+        { label: "Material Code", text: "Compare ASTM A106 Gr B and API 5L Gr B pipes" }
+    ],
+    "Structural Steel": [
+        { label: "BOQ Generation", text: "Generate a BOQ for structural steel for a warehouse", wide: true },
+        { label: "Grade Comparison", text: "Compare mechanical properties of IS 2062 steel grades" },
+        { label: "Section Modulus", text: "List section modulus for standard ISMB beams" },
+        { label: "Welding Specs", text: "Welding requirements for high tensile structural steel" }
+    ],
+    "Equipment": [
+        { label: "Compressor Specs", text: "Typical datasheet parameters for a centrifugal air compressor", wide: true },
+        { label: "Pump Sizing", text: "How to calculate pump head for a cooling water system?" },
+        { label: "Heat Exchangers", text: "TEMA standards for shell and tube heat exchangers" }
+    ],
+    "BF & Process": [
+        { label: "Blast Furnace Gas", text: "Typical composition and calorific value of BF gas", wide: true },
+        { label: "Coke Rate", text: "What factors affect the coke rate in a blast furnace?" },
+        { label: "Stove Operation", text: "Describe the operating cycle of hot blast stoves" },
+        { label: "Slag Granulation", text: "Process overview of cast house slag granulation" }
+    ],
+    "Price Schedules": [
+        { label: "Steel Prices", text: "Current price trends for structural steel sections", wide: true },
+        { label: "Piping Costs", text: "Unit rate comparison for CS vs SS seamless pipes" },
+        { label: "Cost Estimation", text: "How to estimate erection costs for heavy equipment?" }
+    ],
+    "E&I / Civil": [
+        { label: "Cable Sizing", text: "Voltage drop calculation for LT power cables", wide: true },
+        { label: "Concrete Grades", text: "Applications of M25 vs M30 grade concrete in foundations" },
+        { label: "Instrument Air", text: "Quality standards for instrument air as per ISA" },
+        { label: "Soil Bearing", text: "Typical safe bearing capacity values for different soils" }
+    ]
+};
+
+function renderSuggestions(category) {
+    const grid = document.getElementById('suggestion-grid');
+    if (!grid) return;
+    
+    const sugs = categorySuggestions[category] || categorySuggestions["All Categories"];
+    grid.innerHTML = sugs.map(s => `
+        <button class="suggestion ${s.wide ? 'suggestion-wide' : ''}">
+            <div class="sug-label">${s.label}</div>
+            <div class="sug-text">${s.text}</div>
+        </button>
+    `).join('');
+    
+    grid.querySelectorAll('.suggestion').forEach(s => {
+        s.addEventListener('click', () => {
+            if (userInput) {
+                userInput.value = s.querySelector('.sug-text') ? s.querySelector('.sug-text').textContent : s.textContent;
+                sendMessage();
+            }
+        });
+    });
+}
+
 // ─── CATEGORY NAV ────────────────────────────────────────────────────────────
 document.querySelectorAll('.cat-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentCategory = btn.getAttribute('data-category');
+        
+        // Always reset chat to empty state when switching/refreshing categories
+        if (chatMsgs) {
+            chatMsgs.innerHTML = `
+                <div class="empty-state" id="empty-state">
+                    <div class="empty-header">
+                        <div class="empty-eyebrow">MECON-AI Technical Intelligence</div>
+                        <h1 class="empty-title">What would you<br /><em>like to know?</em></h1>
+                        <p class="empty-desc">Query steel specifications, generate BOQs, compare grades, extract datasheets — powered by MECON's engineering knowledge base.</p>
+                    </div>
+                    <div class="suggestion-grid" id="suggestion-grid"></div>
+                </div>
+            `;
+        }
+        
+        // Reset process/session state
+        currentThreadId = null; 
+        Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch (e) { } });
+        chartInstances = {};
+        
+        // Load the new questions
+        renderSuggestions(currentCategory);
     });
 });
 
@@ -122,7 +211,7 @@ async function sendMessage() {
             body: JSON.stringify({
                 query: text,
                 category: currentCategory,
-                thread_id: 'unused',
+                thread_id: currentThreadId || 'unused',
                 chat_history: getChatHistory()
             })
         });
