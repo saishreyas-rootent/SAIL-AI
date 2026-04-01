@@ -80,7 +80,8 @@ async def chat(req: ChatRequest):
         clarification_questions = final_values.get("clarification_questions", [])
 
         # Auto-approve if agent is confident (needs_human_review=False)
-        if is_waiting_for_review and not final_values.get("needs_human_review", False):
+        # FIX: Ensure we do NOT auto-approve if we are waiting for clarification answers
+        if is_waiting_for_review and not final_values.get("needs_human_review", False) and not final_values.get("awaiting_clarification", False):
             app_graph.update_state(
                 config,
                 {"human_approved": True, "human_feedback": None},

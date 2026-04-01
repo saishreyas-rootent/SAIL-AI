@@ -93,6 +93,72 @@ textarea { font-family: inherit; }
 }
 
 .topbar-left { flex-shrink: 0; }
+  /* TABLE CONTAINER */
+  .tbl-container { margin: 12px 0; transition: transform 0.2s ease, box-shadow 0.2s ease; border-radius: 6px; }
+  .tbl-container:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); background: rgba(255,255,255,0.02); }
+
+  /* TABLE HEADER ROW — title + download button */
+  .tbl-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    padding-right: 2px;
+  }
+
+  .tbl-title {
+    font-size: 11px; font-weight: 600; color: var(--text2);
+    font-family: 'DM Mono', monospace; text-transform: uppercase;
+    letter-spacing: 0.05em; padding-left: 2px;
+  }
+
+  /* DOWNLOAD BUTTON */
+  .tbl-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    padding: 3px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+  }
+  .tbl-download-btn:hover {
+    background: var(--accent);
+    color: #0d1117;
+  }
+  .tbl-download-btn:active {
+    transform: scale(0.97);
+  }
+
+  .tbl-scroll { overflow-x: auto; border-radius: 6px; }
+  .tbl-scroll::-webkit-scrollbar { height: 3px; }
+  .tbl-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .spec-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .spec-table th {
+    text-align: left; padding: 7px 10px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--accent); font-family: 'DM Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .spec-table td {
+    padding: 6px 10px; border: 1px solid var(--border2);
+    color: var(--text); vertical-align: top; white-space: nowrap;
+  }
+  .spec-table tr td { transition: background-color 0.2s ease; align-items: center; }
+  .spec-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  .spec-table tr:hover td { background: rgba(232,168,76,0.1); color: #fff; }
+  .spec-table tr.total-row td {
+    background: rgba(232,168,76,0.08) !important;
+    color: var(--accent) !important; font-weight: 600;
+    border-top: 1px solid rgba(232,168,76,0.3) !important;
+  }
 
 .topbar-center {
   flex: 1;
@@ -115,6 +181,59 @@ textarea { font-family: inherit; }
   gap: 11px;
   text-decoration: none;
 }
+  /* CLARIFICATION CARD */
+  .clarify-bubble {
+    background: var(--bg2) !important;
+    border: 1px solid var(--blue) !important;
+    padding: 16px !important;
+  }
+  .clarify-intro {
+    font-size: 13px; color: var(--text); margin-bottom: 16px; line-height: 1.6;
+  }
+  .clarify-questions-wrap { display: flex; flex-direction: column; gap: 14px; }
+  .clarify-question { display: flex; flex-direction: column; gap: 6px; }
+  .clarify-q-label {
+    font-size: 12px; color: var(--text2); line-height: 1.5;
+    font-family: 'Sora', sans-serif;
+  }
+  .clarify-q-label::before { content: '› '; color: var(--blue); font-weight: 600; }
+  .clarify-input {
+    width: 100%; padding: 8px 12px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text);
+    font-size: 12px; font-family: 'Sora', sans-serif;
+    outline: none; transition: border-color 0.15s;
+  }
+  .clarify-input:focus { border-color: var(--blue); }
+  .clarify-input::placeholder { color: var(--text3); }
+  .clarify-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+  .clarify-submit-btn {
+    padding: 8px 18px; border-radius: 6px;
+    background: var(--blue); border: none;
+    color: #0d1117; font-size: 12px;
+    font-family: 'Sora', sans-serif; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .clarify-submit-btn:hover { background: #79c0ff; }
+  .clarify-submitted {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--green);
+    font-family: 'DM Mono', monospace; padding: 4px 0;
+  }
+  .clarify-submitted-icon { font-size: 14px; }
+
+  /* TYPING */
+  .typing { display: flex; align-items: center; gap: 4px; padding: 10px 14px; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text3); animation: dot-blink 1.4s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-blink {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
 
 .logo-rootent-img {
   height: 30px;
