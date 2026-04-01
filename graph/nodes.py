@@ -259,7 +259,14 @@ def hitl_review_node(state: MECONState) -> MECONState:
 def output_generation_node(state: MECONState) -> MECONState:
     """
     Agent 2 is bypassed — Agent 1's JSON is passed straight through as final answer.
+    If clarification is needed, skip setting final_answer so the frontend shows the clarification card.
     """
+    # If awaiting clarification, do NOT set final_answer
+    # Frontend needs final_answer to be empty to show the clarification card
+    if state.get("awaiting_clarification"):
+        state["agent_trace"].append("⏸ Output skipped — awaiting clarification from user")
+        return state
+
     draft = state["current_draft"]
 
     # DEBUG — print what reaches the output node

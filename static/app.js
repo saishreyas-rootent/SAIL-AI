@@ -163,11 +163,11 @@ function handleApiResponse(data) {
         return;
     }
 
-    // 2. Clarification needed — show sub-questions card, if needed
+    // 2. Clarification needed — show as plain text so user can reply naturally
     if (data.awaiting_clarification && data.clarification_questions && data.clarification_questions.length) {
         const parsed = tryParseJson(state.current_draft);
         const intro = parsed ? (parsed.answer_text || '') : '';
-        appendClarificationCard(intro, data.clarification_questions);
+        appendMessage('bot', intro, [], false);
         return;
     }
 
