@@ -166,6 +166,25 @@ function renderHistory() {
     }
 }
 
+function getChatHistory() {
+    const messages = chatMsgs.querySelectorAll('.msg');
+    const history = [];
+    messages.forEach(msg => {
+        if (msg.id === 'typing-indicator') return;
+        const isUser = msg.classList.contains('user');
+        const bubble = msg.querySelector('.msg-bubble');
+        if (!bubble) return;
+        const text = bubble.innerText.trim();
+        if (!text) return;
+        history.push({
+            role: isUser ? 'user' : 'assistant',
+            content: text
+        });
+    });
+    // Keep last 6 messages only to avoid token overflow
+    return history.slice(-6);
+}
+
 // ─── CORE SEND ───────────────────────────────────────────────────────────────
 async function sendMessage() {
     const text = userInput.value.trim();
@@ -192,7 +211,8 @@ async function sendMessage() {
             body: JSON.stringify({
                 query: text,
                 category: currentCategory,
-                thread_id: currentThreadId || 'unused'
+                thread_id: currentThreadId || 'unused',
+                chat_history: getChatHistory()
             })
         });
 

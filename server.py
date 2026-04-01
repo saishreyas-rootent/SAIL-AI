@@ -39,6 +39,7 @@ class ChatRequest(BaseModel):
     query: str
     category: str
     thread_id: str
+    chat_history: list = []
 
 
 class ReviewRequest(BaseModel):
@@ -62,8 +63,17 @@ async def chat(req: ChatRequest):
     fresh_thread_id = "th_" + uuid.uuid4().hex[:12]
     config = {"configurable": {"thread_id": fresh_thread_id}}
 
+    # Build conversation context from history
+    history_text = ""
+    if req.chat_history:
+        history_text = "\n\nPREVIOUS CONVERSATION:\n"
+        for msg in req.chat_history:
+            role = "User" if msg.get("role") == "user" else "Assistant"
+            history_text += f"{role}: {msg.get('content', '')}\n"
+        history_text += "\nCurrent query (answer this based on the above context):"
+
     initial_input = {
-        "user_query": req.query,
+        "user_query": history_text + "\n" + req.query if history_text else req.query,
         "category": req.category,
     }
 
